@@ -45,7 +45,7 @@ void Display_HC595::update()
 
    digitalWrite( this->cathodes[ current_digit ], HIGH );
 
-   digitalWrite( DISPLAY_HC595_OE_PIN, LOW );
+//   digitalWrite( DISPLAY_HC595_OE_PIN, LOW );
 
    ++current_digit;
    if( current_digit == DISPLAY_HC595_CATHODES ) current_digit = 0;

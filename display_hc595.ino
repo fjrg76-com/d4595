@@ -24,7 +24,7 @@
 #include "Display_HC595.hpp"
 
 #define HUNDREDTHS_COUNTER_MOD 100
-#define SECONDS_COUNTER_MOD 15
+#define SECONDS_COUNTER_MOD 10
 
 #define SCROLL_PERIOD 3 // x100 [ms]
 
@@ -61,12 +61,180 @@ constexpr uint8_t digits_array[18] =
 //constexpr uint8_t cathodes_array[DISPLAY_HC595_CATHODES] = { 3, 4, 5, 6 };
 constexpr uint8_t cathodes_array[DISPLAY_HC595_CATHODES] = { 3, 5, 4, 6 };
 
+
+class Blink
+{
+public:
+   enum class eMode: uint8_t { ONCE, REPETITIVE, FOREVER };
+   enum class ePolarity: uint8_t { ACTIVE_HIGH, ACTIVE_LOW };
+
+   Blink();
+   Blink& operator=(Blink&) = delete;
+   Blink(Blink&) = delete;
+
+   void begin( uint8_t pin, ePolarity polarity = ePolarity::ACTIVE_LOW );
+   void set( eMode mode, uint16_t ticks_on, uint16_t ticks_off = 0, uint16_t times = 1);
+   void start();
+   void stop();
+   void state_machine();
+   bool is_running();
+
+   void always_on();
+   void always_off();
+
+private:
+   uint8_t pin{0};
+
+   uint16_t ticks_onMOD{0};
+   uint16_t ticks_offMOD{0};
+   uint16_t ticks{0};
+
+   eMode mode{eMode::ONCE};
+
+   ePolarity polarity{ePolarity::ACTIVE_HIGH};
+
+   uint16_t timesMOD{0};
+   uint16_t times{0};
+   bool running{false};
+   uint8_t state{0};
+
+   void out( uint8_t new_state );
+   // output hardware wrapper
+};
+
+Blink::Blink()
+{
+   // nothing
+}
+
+void Blink::begin( uint8_t pin, ePolarity polarity )
+{
+   this->pin = pin;
+   this->polarity = polarity;
+
+   pinMode( this->pin, OUTPUT );
+
+   digitalWrite( this->pin, static_cast<uint8_t>(this->polarity) ^ LOW );
+   // turns off the peripheral
+}
+
+void Blink::set( eMode mode, uint16_t ticks_on, uint16_t ticks_off, uint16_t times )
+{
+   this->mode         = mode;
+   this->ticks_onMOD  = ticks_on;
+   this->ticks_offMOD = ticks_off;
+   this->timesMOD     = times;
+}
+
+void Blink::start()
+{
+   this->running = false;
+
+   this->ticks = this->ticks_onMOD;
+
+   if( this->mode == eMode::REPETITIVE )
+   {
+      this->times = this->timesMOD;
+   }
+
+   this->state = 0;
+   this->running = true;
+
+   out( HIGH );
+}
+
+void Blink::stop()
+{
+   this->running = false;
+}
+
+void Blink::state_machine()
+{
+   if( this->running )
+   {
+      switch( this->state )
+      {
+         case 0:
+            --this->ticks;
+            if( this->ticks == 0 )
+            {
+               out( LOW );
+
+               if( this->mode == eMode::REPETITIVE or this->mode == eMode::FOREVER )
+               {
+                  this->ticks = this->ticks_offMOD;
+                  this->state = 1;
+               }
+               else
+               {
+                  this->running = false;
+               }
+            }
+            break;
+
+         case 1:
+            --this->ticks;
+            if( this->ticks == 0 )
+            {
+               if( this->mode == eMode::REPETITIVE )
+               {
+                  --this->times;
+                  if( this->times == 0 )
+                  {
+                     this->running = false;
+                  }
+               }
+               else // eMode::FOREVER:
+               {
+                  this->state = 0;
+                  this->ticks = this->ticks_onMOD;
+
+//                  digitalWrite( this->pin, HIGH );
+                  out( HIGH );
+               }
+            }
+            break;
+
+      } // switch state
+   } // if this->running
+}
+
+bool Blink::is_running()
+{
+   return this->running;
+}
+
+void Blink::always_on()
+{
+   this->running = false;
+   out( HIGH );
+}
+
+void Blink::always_off()
+{
+   this->running = false;
+   out( LOW );
+}
+
+inline void Blink::out( uint8_t new_state )
+{
+   digitalWrite( this->pin, static_cast<uint8_t>(this->polarity) ^ new_state );
+}
+
+
+
 Display_HC595 display;
+
+Blink hc595_oe;
+
 
 void setup()
 {
    Serial.begin( 115200 );
    display.begin( cathodes_array, digits_array );
+
+   hc595_oe.begin( DISPLAY_HC595_OE_PIN, Blink::ePolarity::ACTIVE_LOW );
+   hc595_oe.always_on();
 }
 
 void loop() 
@@ -92,6 +260,7 @@ void loop()
 
    delay( SYSTEM_TICK );
    display.update();
+   hc595_oe.state_machine();
 
 
    --hundredths;
@@ -140,7 +309,7 @@ void loop()
    {
       seconds = MILLIS_TO_TICKS( 1000 );
 
-      if( mode == eMode::SECONDS /*and seconds_counter > 0*/ )
+      if( mode == eMode::SECONDS )
       {
          display.clear();
          display.print_number( seconds_counter, 3, false );
@@ -155,23 +324,32 @@ void loop()
    switch( state )
    {
       case 0:
+         state = 1;
+
          seconds_counter = SECONDS_COUNTER_MOD;
          mode = eMode::SECONDS;
-         state = 1;
+
+         hc595_oe.always_on();
          break;
 
       case 1:
          if( seconds_counter == 0 )
          {
+            state = 2;
+
             hundredths_counter = HUNDREDTHS_COUNTER_MOD;
             mode = eMode::HUNDREDTHS;
-            state = 2;
+
+            hc595_oe.set( Blink::eMode::FOREVER, MILLIS_TO_TICKS( 200 ), MILLIS_TO_TICKS( 200 ) );
+            hc595_oe.start();
          }
          break;
 
       case 2:
          if( hundredths_counter == 0 )
          {
+            state = 3;
+
             display.clear();
 
             str_time = SCROLL_PERIOD;
@@ -182,7 +360,10 @@ void loop()
             str_idx = 0;
             str_reps = 1;
             mode = eMode::TEXT;
-            state = 3;
+
+            hc595_oe.stop();
+            hc595_oe.set( Blink::eMode::FOREVER, MILLIS_TO_TICKS( 100 ), MILLIS_TO_TICKS( 400 ) );
+            hc595_oe.start();
          }
          break;
 
@@ -190,6 +371,7 @@ void loop()
          if( str_reps == 0 )
          {
             state = 0;
+            hc595_oe.always_on();
          }
          break;
    }
