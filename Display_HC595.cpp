@@ -18,7 +18,7 @@ void Display_HC595::begin( const uint8_t* cathodes, const uint8_t* digits )
 
    for( uint8_t i = 0; i < DISPLAY_HC595_CATHODES; ++i )
    {
-      pinMode( this->cathodes[ i ], OUTPUT ); 
+      pinMode( this->cathodes[ i ], OUTPUT );
       digitalWrite( this->cathodes[ i ], LOW );
    }
 
@@ -38,10 +38,9 @@ void Display_HC595::update()
    }
 
    digitalWrite( DISPLAY_HC595_LATCH_PIN, LOW );
-
-   SPI.beginTransaction( SPISettings( 16000000, MSBFIRST, SPI_MODE0 ) );
-   SPI.transfer( this->memory[ current_digit ] );
-   SPI.endTransaction();
+    SPI.beginTransaction( SPISettings( 16000000, MSBFIRST, SPI_MODE0 ) );
+    SPI.transfer( this->memory[ current_digit ] );
+    SPI.endTransaction();
    digitalWrite( DISPLAY_HC595_LATCH_PIN, HIGH );
 
    digitalWrite( this->cathodes[ current_digit ], HIGH );
@@ -133,32 +132,37 @@ void Display_HC595::print_number( uint16_t num, uint8_t dp_pos, bool leading_zer
       uint16_t digit = num - div * 10;
       num = div;
 
-      if( digit == 0 and num == 0 and leading_zero == false ) 
+      if( leading_zero == false and digit == 0 and num == 0 )
       {
          // prints out the most right zero (units)
-         if( i == DISPLAY_HC595_CATHODES and num == 0 )
+         if( i == DISPLAY_HC595_CATHODES )
          {
             this->memory[ i - 1 ] = this->digits[0] + ((dp_pos==(i-1)) ? SEG_DP : 0);
          }
 
-         // doesn't print out any other zero than the units
+         // doesn't print out any other zero than that in the units, and prints out the decimal point.
+         // The decimal point can be located anywhere, not only in the right most position
          else
          {
-            this->memory[ i - 1 ] = 0 + ((dp_pos==(i-1)) ? SEG_DP : 0);
+            this->memory[ i - 1 ] = ((dp_pos==(i-1)) ? SEG_DP : 0);
+
+            if( this->memory[ i - 1 ] > 0 ) return;
+            // the decimal point has been printed out, nothing else to do
          }
       }
+
       else
       {
          this->memory[ i - 1 ] = this->digits[ digit ] + ((dp_pos==(i-1)) ? SEG_DP : 0);
       }
    }
-
 }
+
 
 void Display_HC595::clear()
 {
    for( uint8_t i = DISPLAY_HC595_CATHODES; i > 0; --i )
    {
-      this->memory[ i ] = 0;
+      this->memory[ i - 1 ] = 0;
    }
 }

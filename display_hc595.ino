@@ -24,11 +24,14 @@
 #include "Display_HC595.hpp"
 
 #define HUNDREDTHS_COUNTER_MOD 100
-#define SECONDS_COUNTER_MOD 10
+#define SECONDS_COUNTER_MOD 15
 
-#define SCROLL_PERIOD 4 // x100 = 400 ms
+#define SCROLL_PERIOD 3 // x100 [ms]
 
-enum class eMode: uint8_t { NONE, HUNDREDTHS, SECONDS, TEXT };
+enum class eMode: uint8_t
+{ 
+   NONE, HUNDREDTHS, SECONDS, TEXT 
+};
 
 
 constexpr uint8_t digits_array[18] =
@@ -55,7 +58,8 @@ constexpr uint8_t digits_array[18] =
    SEG_F + SEG_E + SEG_A + SEG_B + SEG_G,         // P 
 };
 
-constexpr uint8_t cathodes_array[DISPLAY_HC595_CATHODES] = { 3, 4, 5, 6 };
+//constexpr uint8_t cathodes_array[DISPLAY_HC595_CATHODES] = { 3, 4, 5, 6 };
+constexpr uint8_t cathodes_array[DISPLAY_HC595_CATHODES] = { 3, 5, 4, 6 };
 
 Display_HC595 display;
 
@@ -76,13 +80,13 @@ void loop()
    static eMode mode = eMode::NONE;
 
 
-      static char str_txt[] = "0123456789ABCDEF ";
-      static uint8_t str_len = strlen( str_txt );
-      static uint8_t str_time = 0;
-      static uint8_t str_idx = 0;
-      static char str_buffer[ DISPLAY_HC595_CATHODES + 1 ] = "    ";
+   static char str_txt[] = "0123456789ABCDEF ";
+   static uint8_t str_len = strlen( str_txt );
+   static uint8_t str_time = 0;
+   static uint8_t str_idx = 0;
+   static char str_buffer[ DISPLAY_HC595_CATHODES + 1 ] = "    ";
 
-      static uint8_t str_reps = 0;
+   static uint8_t str_reps = 0;
 
 
 
@@ -97,6 +101,7 @@ void loop()
 
       if( mode == eMode::HUNDREDTHS and hundredths_counter > 0 )
       {
+         display.clear();
          display.print_number( hundredths_counter, 2, true );
 
          if( hundredths_counter > 0 ) --hundredths_counter;
@@ -137,13 +142,14 @@ void loop()
 
       if( mode == eMode::SECONDS /*and seconds_counter > 0*/ )
       {
+         display.clear();
          display.print_number( seconds_counter, 3, false );
 
          if( seconds_counter > 0 ) --seconds_counter;
       }
    }
 
-// ----------------------------------------------------------------------------
+   // ----------------------------------------------------------------------------
 
    static uint8_t state = 0;
    switch( state )
@@ -174,7 +180,7 @@ void loop()
                str_buffer[ i ] = " ";
             }
             str_idx = 0;
-            str_reps = 2;
+            str_reps = 1;
             mode = eMode::TEXT;
             state = 3;
          }
